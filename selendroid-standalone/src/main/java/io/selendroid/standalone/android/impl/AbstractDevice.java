@@ -63,6 +63,7 @@ public abstract class AbstractDevice implements AndroidDevice {
   private static final Logger log = Logger.getLogger(AbstractDevice.class.getName());
   public static final String WD_STATUS_ENDPOINT = "http://localhost:8080/wd/hub/status";
   protected String serial = null;
+  protected String model = null;
   protected Integer port = null;
   protected IDevice device;
   private ByteArrayOutputStream logoutput;
@@ -237,8 +238,7 @@ public abstract class AbstractDevice implements AndroidDevice {
 
     List<String> argList = Lists.newArrayList(
         "-e", "main_activity", aut.getMainActivity(),
-        "-e", "server_port", Integer.toString(port)
-        );
+        "-e", "server_port", Integer.toString(port));
     if (capabilities.getSelendroidExtensions() != null) {
       argList.addAll(Lists.newArrayList("-e", "load_extensions", "true"));
       if (capabilities.getBootstrapClassNames() != null) {
@@ -253,19 +253,25 @@ public abstract class AbstractDevice implements AndroidDevice {
 
     String result = executeCommandQuietly(command);
     if (result.contains("FAILED")) {
-      String detailedResult;
+      String genericMessage = "Could not start the app under test using instrumentation.";
+      String detailedMessage;
       try {
         // Try again, waiting for instrumentation to finish. This way we'll get more error output.
         String[] instrumentCmd =
             ObjectArrays.concat(new String[]{"shell", "am", "instrument", "-w"}, args, String.class);
-        CommandLine getErrorDetailCommand = adbCommand(instrumentCmd);
-        detailedResult = executeCommandQuietly(getErrorDetailCommand);
+        CommandLine getDetailedErrorCommand = adbCommand(instrumentCmd);
+        String detailedResult = executeCommandQuietly(getDetailedErrorCommand);
+        if (detailedResult.contains("package")) {
+          detailedMessage =
+              genericMessage + " Is the correct app under test installed? Read the details below:\n" + detailedResult;
+        } else {
+          detailedMessage = genericMessage + " Read the details below:\n" + detailedResult;
+        }
       } catch (Exception e) {
-        detailedResult = "Could not run get detailed result: " +
-            e.getMessage() + "\n" + Throwables.getStackTraceAsString(e);
+        // Can't get detailed results
+        throw new SelendroidException(genericMessage, e);
       }
-      throw new SelendroidException("Error occurred while starting selendroid-server on the device",
-          new Throwable(result + "\nDetails:\n" + detailedResult));
+      throw new SelendroidException(detailedMessage);
     }
 
     forwardSelendroidPort(port);
@@ -301,14 +307,13 @@ public abstract class AbstractDevice implements AndroidDevice {
   public boolean isSelendroidRunning() {
     HttpClient httpClient = HttpClientBuilder.create().build();
     String url = WD_STATUS_ENDPOINT.replace("8080", String.valueOf(port));
-    log.info("Using url: " + url);
+    log.info("Checking if the Selendroid server is running: " + url);
     HttpRequestBase request = new HttpGet(url);
-    HttpResponse response = null;
+    HttpResponse response;
     try {
       response = httpClient.execute(request);
     } catch (Exception e) {
-      log.log(Level.INFO, "Error checking if selendroid-server has started.", e);
-      log.info("Assuming server has not started");
+      log.info("Can't connect to Selendroid server, assuming it is not running.");
       return false;
     }
 
@@ -595,5 +600,9 @@ public abstract class AbstractDevice implements AndroidDevice {
   @Override
   public int hashCode() {
     return device.hashCode();
+  }
+
+  public String getModel() {
+    return model;
   }
 }
