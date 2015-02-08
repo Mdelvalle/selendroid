@@ -2,6 +2,8 @@ language: android
 android:
   components:
     - build-tools-19.0.3
+    - extra-google-m2repository
+    - extra-android-m2repository
     - android-16
     - sysimg-16
   licences:
@@ -23,6 +25,10 @@ branches:
 
 before_install: 
   - "git clone -b travis `git config --get remote.origin.url` target/travis"
+  - "mvn --version"
+  - "cd third-party/cordova-3.7.0"
+  - "./mvnInstall.sh"
+  - "cd ../../"
 
 script: 
   - "[ ${TRAVIS_PULL_REQUEST} = 'false' ] && mvn clean deploy --settings target/travis/settings.xml || mvn clean verify --settings target/travis/settings.xml"

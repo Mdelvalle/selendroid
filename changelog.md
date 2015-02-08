@@ -1,4 +1,16 @@
-0.14.0-SNAPSHOT (under current development)
+0.15.0-SNAPSHOT (under current development)
+---
+- Fix native view search with multiple top level views [#799](../../issues/799) 
+- Reverted the 'adb.terminate()' call (back into if condition). [#803](../../issues/803) 
+- Log click position [#801](../../issues/801)
+- fix registration of selendroid server into a selenium grid [#802](../../issues/802) 
+- fix NPE on native apps driver.switchTo().defaultContent() [#776](../../issues/776) 
+- Fixing maven issues by using latest maven-android-plugin. [#804](../../issues/804)  
+
+0.14.0
+---
+- Don't log exception when waiting for the Selendroid server to start
+- fixed support for Cordova 3.6.x apps
 
 0.13.0
 ---
