@@ -22,6 +22,7 @@ import io.selendroid.server.android.WebViewMotionSender;
 import io.selendroid.server.android.internal.DomWindow;
 import io.selendroid.server.common.exceptions.SelendroidException;
 import io.selendroid.server.common.exceptions.StaleElementReferenceException;
+import io.selendroid.server.common.exceptions.TimeoutException;
 import io.selendroid.server.model.internal.WebViewHandleMapper;
 import io.selendroid.server.model.js.AndroidAtoms;
 import io.selendroid.server.util.SelendroidLogger;
@@ -35,20 +36,27 @@ import java.util.Set;
 import org.apache.cordova.CordovaChromeClient;
 import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaWebView;
+import org.apache.cordova.engine.SystemWebChromeClient;
+import org.apache.cordova.engine.SystemWebView;
+import org.apache.cordova.engine.SystemWebViewEngine;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import android.graphics.Bitmap;
 import android.webkit.JsPromptResult;
 import android.webkit.JsResult;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
+
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class SelendroidWebDriver {
   private static final String ELEMENT_KEY = "ELEMENT";
   private static final long FOCUS_TIMEOUT = 1000L;
-  private static final long LOADING_TIMEOUT = 30000L;
   private static final long POLLING_INTERVAL = 50L;
   private static final long START_LOADING_TIMEOUT = 700L;
   static final long UI_TIMEOUT = 3000L;
@@ -70,6 +78,7 @@ public class SelendroidWebDriver {
   private MotionSender motionSender;
   private long scriptTimeout = 60000L;
   private long asyncScriptTimeout = 0L;
+  private long pageLoadTimeout = 30000L;
   private final String contextHandle;
 
   public SelendroidWebDriver(ServerInstrumentation serverInstrumentation, String handle) {
@@ -279,6 +288,7 @@ public class SelendroidWebDriver {
 
 
   public void get(final String url) {
+    resetPageIsLoading();
     serverInstrumentation.getCurrentActivity().runOnUiThread(new Runnable() {
       public void run() {
         webview.loadUrl(url);
@@ -339,10 +349,31 @@ public class SelendroidWebDriver {
             CordovaWebView webview=(CordovaWebView)view;
             CordovaInterface ci=null;
             chromeClient = new ExtendedCordovaChromeClient(null,webview);
+          } else if (view.getClass().getSimpleName().equalsIgnoreCase("SystemWebView")) {
+            SystemWebView webview=(SystemWebView)view;
+            SystemWebViewEngine webEngine= new SystemWebViewEngine(webview);
+            chromeClient = new ExtendedSystemWebChromeClient(webEngine);
           } else {
             chromeClient = new SelendroidWebChromeClient();
           }
           view.setWebChromeClient(chromeClient);
+          // set handlers to indicate whether a page has started/done loading
+          view.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+              synchronized (syncObject) {
+                pageStartedLoading = true;
+                syncObject.notify();
+              }
+            }
+            @Override
+            public void onPageFinished(WebView view, String url) {
+              synchronized (syncObject) {
+                pageDoneLoading = true;
+                syncObject.notify();
+              }
+            }
+          });
 
           WebSettings settings = view.getSettings();
           settings.setJavaScriptCanOpenWindowsAutomatically(true);
@@ -451,14 +482,17 @@ public class SelendroidWebDriver {
           throw new RuntimeException();
         }
       }
-
-      long end = System.currentTimeMillis() + LOADING_TIMEOUT;
+      long end = System.currentTimeMillis() + pageLoadTimeout;
       while (!pageDoneLoading && pageStartedLoading && (System.currentTimeMillis() < end)) {
         try {
-          syncObject.wait(LOADING_TIMEOUT);
+          syncObject.wait(POLLING_INTERVAL);
         } catch (InterruptedException e) {
           throw new RuntimeException(e);
         }
+      }
+      if (!pageDoneLoading) {
+        throw new TimeoutException(String.format("Timed out after %d seconds",
+          SECONDS.convert(pageLoadTimeout, MILLISECONDS)));
       }
     }
   }
@@ -497,6 +531,55 @@ public class SelendroidWebDriver {
           res = res.substring(i + 2);
           /*
            * Workaround for Japanese character encodings: Replace U+00A5 with backslash so that we
+           * can properly parse JSON strings contains backslash escapes, since WebKit maps 0x5C
+           * (used for character escaping in all of the Japanses character encodings) to U+00A5 (YEN
+           * SIGN) and breaks escape characters.
+           */
+          if (("EUC-JP".equals(enc) || "Shift_JIS".equals(enc) || "ISO-2022-JP".equals(enc))
+              && res.contains("\u00a5")) {
+            SelendroidLogger.info("Perform workaround for japanese character encodings");
+            SelendroidLogger.debug("Original String: " + res);
+            res = res.replace("\u00a5", "\\");
+            SelendroidLogger.debug("Replaced result: " + res);
+          }
+          result = res;
+          syncObject.notify();
+        }
+
+        return true;
+      } else {
+        currentAlertMessage.add(message == null ? "null" : message);
+        SelendroidLogger.info("new alert message: " + message);
+        return super.onJsAlert(view, url, message, jsResult);
+      }
+    }
+  }
+
+
+  //Like ExtendedCordovaClient, but for Cordova 4.0.0
+  public class ExtendedSystemWebChromeClient extends SystemWebChromeClient {
+
+
+    public  ExtendedSystemWebChromeClient(SystemWebViewEngine parentEngine) {
+      super(parentEngine);
+    }
+
+    /**
+     * Unconventional way of adding a Javascript interface but the main reason why I took this way
+     * is that it is working stable compared to the webview.addJavascriptInterface way.
+     **/
+   @Override
+    public boolean onJsAlert(WebView view, String url, String message, JsResult jsResult) {
+      if (message != null && message.startsWith("selendroid<")) {
+        jsResult.confirm();
+
+        synchronized (syncObject) {
+          String res = message.replaceFirst("selendroid<", "");
+          int i = res.indexOf(">:");
+          String enc = res.substring(0, i);
+          res = res.substring(i + 2);
+
+          /* Workaround for Japanese character encodings: Replace U+00A5 with backslash so that we
            * can properly parse JSON strings contains backslash escapes, since WebKit maps 0x5C
            * (used for character escaping in all of the Japanses character encodings) to U+00A5 (YEN
            * SIGN) and breaks escape characters.
@@ -686,7 +769,7 @@ public class SelendroidWebDriver {
   }
 
   public void back() {
-    pageDoneLoading = false;
+    resetPageIsLoading();
     runSynchronously(new Runnable() {
       public void run() {
         webview.goBack();
@@ -696,7 +779,7 @@ public class SelendroidWebDriver {
   }
 
   public void forward() {
-    pageDoneLoading = false;
+    resetPageIsLoading();
     runSynchronously(new Runnable() {
       public void run() {
         webview.goForward();
@@ -706,7 +789,7 @@ public class SelendroidWebDriver {
   }
 
   public void refresh() {
-    pageDoneLoading = false;
+    resetPageIsLoading();
     runSynchronously(new Runnable() {
       public void run() {
         webview.reload();
@@ -731,5 +814,9 @@ public class SelendroidWebDriver {
 
   public void setAsyncScriptTimeout(long timeout) {
     asyncScriptTimeout = timeout;
+  }
+
+  public void setPageLoadTimeout(long timeout) {
+    pageLoadTimeout = timeout;
   }
 }

@@ -1,6 +1,14 @@
 0.16.0-SNAPSHOT (under current development)
 ---
-- 
+- gets app version from pom.xml if class path doesn't start with jar [#835](../../issues/835)
+- Clear data before app launch [#844](../../issues/844) 
+- Drop explicit 'implements TakesScreenshot, JavascriptExecutor' declarations [#846](../../issues/746) 
+- Trigger DOM event of type 'INPUT' after changing value of INPUT element [#746](../../issues/746)
+- Grid auto re-register [#756](../../issues/756)
+- Added activities to test touch gestures in the selendroid-test app [#848](../../issues/848) 
+- implemented driver.manage().timeouts().PageLoadTimeout() [#849](../../issues/849)
+- Added cordova-android 4.0.0 support [859](../../issues/859)
+- Append error details to page source [850](../../issues/850) 
 
 0.15.0
 ---
