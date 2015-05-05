@@ -607,4 +607,31 @@ public abstract class AbstractDevice implements AndroidDevice {
   public String getAPITargetType() {
     return apiTargetType;
   }
+
+  public void unlockScreen() throws AndroidDeviceException {
+    // Get phone's android version and whether the screen is off.
+    // Different ways to detect if the screen is off depending on the version.
+    CommandLine commandVersion = adbCommand("shell", "getprop", "ro.build.version.release");
+    String version = executeCommandQuietly(commandVersion);
+    CommandLine commandScreen = adbCommand("shell", "dumpsys", "power");
+    String screen = executeCommandQuietly(commandScreen);
+
+    // Kitkat
+    if (version.matches("^4\\.4(\\..*)?")) {
+      String value = extractValue("mScreenOn=(.*?)$", screen);
+
+      if (value.equals("false")) {
+        // Wake screen
+        inputKeyevent(26);
+      }
+      // Lollipop
+    } else if (version.matches("^5\\.0(\\..*)?") || version.matches("^5\\.1(\\..*)?")) {
+      String value = extractValue("Display Power: state=(.*?)$", screen);
+
+      if (value.equals("OFF")) {
+        // Wake screen
+        inputKeyevent(26);
+      }
+    }
+  }
 }

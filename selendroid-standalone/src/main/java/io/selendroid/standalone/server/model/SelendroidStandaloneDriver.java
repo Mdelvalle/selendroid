@@ -30,6 +30,7 @@ import io.selendroid.standalone.android.impl.DefaultAndroidEmulator;
 import io.selendroid.standalone.android.impl.DefaultDeviceManager;
 import io.selendroid.standalone.android.impl.DefaultHardwareDevice;
 import io.selendroid.standalone.android.impl.InstalledAndroidApp;
+import io.selendroid.standalone.android.impl.AbstractDevice;
 import io.selendroid.standalone.builder.AndroidDriverAPKBuilder;
 import io.selendroid.standalone.builder.SelendroidServerBuilder;
 import io.selendroid.standalone.exceptions.AndroidDeviceException;
@@ -57,6 +58,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
 
 public class SelendroidStandaloneDriver implements ServerDetails {
 
@@ -229,6 +231,9 @@ public class SelendroidStandaloneDriver implements ServerDetails {
         // If we are using an emulator need to start it up
         if (device instanceof AndroidEmulator) {
           startAndroidEmulator(desiredCapabilities, (AndroidEmulator) device);
+          // If we are using an android device
+        } else {
+          device.unlockScreen();
         }
 
         boolean appInstalledOnDevice = device.isInstalled(app) || app instanceof InstalledAndroidApp;
@@ -284,12 +289,12 @@ public class SelendroidStandaloneDriver implements ServerDetails {
 
         // create the new session on the device server
         RemoteWebDriver driver =
-                new RemoteWebDriver(new URL("http://localhost:" + port + "/wd/hub"), desiredCapabilities);
+          new RemoteWebDriver(new URL("http://localhost:" + port + "/wd/hub"), desiredCapabilities);
         String sessionId = driver.getSessionId().toString();
         SelendroidCapabilities requiredCapabilities =
-                new SelendroidCapabilities(driver.getCapabilities().asMap());
+          new SelendroidCapabilities(driver.getCapabilities().asMap());
         ActiveSession session =
-                new ActiveSession(sessionId, requiredCapabilities, app, device, port, this);
+          new ActiveSession(sessionId, requiredCapabilities, app, device, port, this);
 
         this.sessions.put(sessionId, session);
 
@@ -347,7 +352,7 @@ public class SelendroidStandaloneDriver implements ServerDetails {
         }
       } else {
         throw new SelendroidException("Selendroid server on the device didn't come up after "
-                + startTimeout / 1000 + "sec:");
+            + startTimeout / 1000 + "sec:");
       }
     }
     log.info("Selendroid server has started.");
@@ -577,7 +582,7 @@ public class SelendroidStandaloneDriver implements ServerDetails {
         deviceInfo.put(SelendroidCapabilities.API_TARGET_TYPE,
             device.getAPITargetType());
         deviceInfo
-            .put(SelendroidCapabilities.PLATFORM_VERSION, device.getTargetPlatform().getApi());
+          .put(SelendroidCapabilities.PLATFORM_VERSION, device.getTargetPlatform().getApi());
         deviceInfo.put(SelendroidCapabilities.SCREEN_SIZE, device.getScreenSize());
 
         list.put(deviceInfo);
