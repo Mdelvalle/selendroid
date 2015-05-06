@@ -59,7 +59,6 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-
 public class SelendroidStandaloneDriver implements ServerDetails {
 
   public static final String WD_RESP_KEY_VALUE = "value";
