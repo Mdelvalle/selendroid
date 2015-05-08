@@ -30,7 +30,6 @@ import io.selendroid.standalone.android.impl.DefaultAndroidEmulator;
 import io.selendroid.standalone.android.impl.DefaultDeviceManager;
 import io.selendroid.standalone.android.impl.DefaultHardwareDevice;
 import io.selendroid.standalone.android.impl.InstalledAndroidApp;
-import io.selendroid.standalone.android.impl.AbstractDevice;
 import io.selendroid.standalone.builder.AndroidDriverAPKBuilder;
 import io.selendroid.standalone.builder.SelendroidServerBuilder;
 import io.selendroid.standalone.exceptions.AndroidDeviceException;
@@ -378,7 +377,7 @@ public class SelendroidStandaloneDriver implements ServerDetails {
   private void startAndroidEmulator(SelendroidCapabilities desiredCapabilities, AndroidEmulator device) throws AndroidDeviceException {
     AndroidEmulator emulator = device;
     if (emulator.isEmulatorStarted()) {
-      emulator.unlockEmulatorScreen();
+      emulator.unlockScreen();
     } else {
       Map<String, Object> config = new HashMap<String, Object>();
       if (serverConfiguration.getEmulatorOptions() != null) {
